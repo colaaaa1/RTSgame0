@@ -1,0 +1,2030 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RTS Battle Prototype</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #16212b;
+      --muted: #64707d;
+      --panel: #ffffff;
+      --line: #d9e0e6;
+      --grass: #93be6d;
+      --water: #68afd0;
+      --danger: #d94f45;
+      --accent: #2e7d6f;
+      --gold: #d29a2e;
+      --steel: #69747e;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background: #e7eef1;
+    }
+
+    .shell {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 340px;
+      min-height: 100vh;
+    }
+
+    .stage {
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background:
+        linear-gradient(90deg, rgba(255, 255, 255, .18) 1px, transparent 1px) 0 0 / 64px 64px,
+        linear-gradient(0deg, rgba(255, 255, 255, .16) 1px, transparent 1px) 0 0 / 64px 64px,
+        #dbe9e6;
+      overflow: hidden;
+    }
+
+    canvas {
+      display: block;
+      width: min(100%, 1024px);
+      height: auto;
+      aspect-ratio: 16 / 10;
+      border: 1px solid rgba(22, 33, 43, .18);
+      box-shadow: 0 22px 44px rgba(22, 33, 43, .14);
+      background: var(--grass);
+      cursor: crosshair;
+    }
+
+    .panel {
+      display: grid;
+      align-content: start;
+      gap: 16px;
+      padding: 22px;
+      background: var(--panel);
+      border-left: 1px solid var(--line);
+    }
+
+    .title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    .badge {
+      min-width: 58px;
+      padding: 5px 8px;
+      border-radius: 6px;
+      text-align: center;
+      color: #fff;
+      background: var(--accent);
+      font-weight: 700;
+      font-size: 13px;
+    }
+
+    .stats,
+    .unit-list,
+    .build-list,
+    .mode-controls,
+    .action-row {
+      display: grid;
+      gap: 10px;
+    }
+
+    .mode-controls,
+    .action-row {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .row strong {
+      color: var(--ink);
+      font-size: 16px;
+    }
+
+    .bar {
+      height: 10px;
+      border-radius: 999px;
+      background: #e8edf0;
+      overflow: hidden;
+    }
+
+    .bar > span {
+      display: block;
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--gold), var(--danger));
+      transition: width .16s ease;
+    }
+
+    .mode-button,
+    .unit-option,
+    .build-option {
+      display: grid;
+      gap: 11px;
+      align-items: center;
+      width: 100%;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--ink);
+      background: #f8faf9;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .mode-button {
+      display: block;
+      min-height: 40px;
+      color: var(--ink);
+      text-align: center;
+      font-weight: 800;
+    }
+
+    .unit-option,
+    .build-option {
+      grid-template-columns: 46px 1fr auto;
+    }
+
+    .mode-button:hover,
+    .unit-option:hover,
+    .build-option:hover {
+      border-color: rgba(46, 125, 111, .58);
+    }
+
+    .mode-button.selected,
+    .unit-option.selected,
+    .build-option.selected {
+      border-color: var(--accent);
+      background: #edf7f4;
+      box-shadow: inset 0 0 0 1px rgba(46, 125, 111, .35);
+    }
+
+    .unit-icon,
+    .build-icon {
+      width: 46px;
+      height: 46px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-weight: 900;
+      box-shadow: inset 0 -5px 0 rgba(0, 0, 0, .12);
+    }
+
+    .unit-icon {
+      border-radius: 50%;
+    }
+
+    .build-icon {
+      border-radius: 7px;
+    }
+
+    .unit-copy,
+    .build-copy {
+      min-width: 0;
+    }
+
+    .unit-copy h2,
+    .build-copy h2 {
+      margin: 0 0 3px;
+      font-size: 15px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    .unit-copy p,
+    .build-copy p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .unit-count,
+    .build-size {
+      min-width: 32px;
+      color: var(--accent);
+      font-weight: 850;
+      text-align: right;
+    }
+
+    .restart,
+    .secondary,
+    .start-attack {
+      width: 100%;
+      min-height: 42px;
+      border: 0;
+      border-radius: 6px;
+      color: #fff;
+      background: var(--accent);
+      font-weight: 750;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .secondary {
+      color: var(--ink);
+      background: #edf1f3;
+    }
+
+    .start-attack {
+      background: #d29a2e;
+    }
+
+    .restart:hover,
+    .secondary:hover,
+    .start-attack:hover { filter: brightness(.96); }
+
+    .restart:active,
+    .secondary:active,
+    .start-attack:active { transform: translateY(1px); }
+
+    .log {
+      min-height: 88px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--muted);
+      background: #fbfcfc;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .legend {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .legend span {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      flex: 0 0 auto;
+      background: var(--accent);
+    }
+
+    .dot.tower { background: var(--danger); }
+    .dot.house { background: var(--gold); }
+    .dot.unit { border-radius: 50%; background: #376b57; }
+    .dot.zone { background: rgba(61, 126, 112, .25); border: 1px dashed #2e7d6f; }
+    .dot.wall { background: #77685c; }
+    .dot.mud { background: #8b6f46; }
+
+    @media (max-width: 900px) {
+      .shell { grid-template-columns: 1fr; }
+      .stage { padding: 12px; }
+      .panel {
+        border-left: 0;
+        border-top: 1px solid var(--line);
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="stage">
+      <canvas id="battlefield" width="1280" height="800" aria-label="战斗地图"></canvas>
+    </section>
+
+    <aside class="panel">
+      <div class="title">
+        <h1>单场战斗原型</h1>
+        <div class="badge" id="statusBadge">部署</div>
+      </div>
+
+      <div class="stats">
+        <div class="row"><span>剩余兵力</span><strong id="troopsLeft">0</strong></div>
+        <div class="row"><span>场上单位</span><strong id="troopsAlive">0</strong></div>
+        <div class="row"><span>主要建筑摧毁</span><strong id="destroyedText">0 / 0</strong></div>
+        <div class="bar" aria-hidden="true"><span id="destroyBar"></span></div>
+        <div class="row"><span>战斗时间</span><strong id="timerText">03:00</strong></div>
+      </div>
+
+      <div class="mode-controls">
+        <button class="mode-button selected" id="systemMapButton" type="button">系统地图</button>
+        <button class="mode-button" id="customMapButton" type="button">自定义布防</button>
+      </div>
+
+      <div class="build-list" id="buildList"></div>
+
+      <div class="action-row">
+        <button class="start-attack" id="startAttackButton" type="button">开始进攻</button>
+        <button class="secondary" id="clearLayoutButton" type="button">清空布防</button>
+        <button class="secondary" id="saveLayoutButton" type="button">保存布局</button>
+        <button class="secondary" id="loadLayoutButton" type="button">读取布局</button>
+      </div>
+
+      <div class="unit-list" id="unitList"></div>
+
+      <button class="restart" id="restartButton" type="button">重新开始</button>
+
+      <div class="legend">
+        <span><i class="dot zone"></i>四面部署区</span>
+        <span><i class="dot unit"></i>进攻单位</span>
+        <span><i class="dot house"></i>普通建筑</span>
+        <span><i class="dot tower"></i>防御建筑</span>
+        <span><i class="dot wall"></i>可破坏墙</span>
+        <span><i class="dot mud"></i>减速泥地</span>
+      </div>
+
+      <div class="log" id="battleLog">选择兵种后，在地图四周绿色区域部署。</div>
+    </aside>
+  </main>
+
+  <script>
+    const canvas = document.querySelector("#battlefield");
+    const ctx = canvas.getContext("2d");
+
+    const ui = {
+      troopsLeft: document.querySelector("#troopsLeft"),
+      troopsAlive: document.querySelector("#troopsAlive"),
+      destroyedText: document.querySelector("#destroyedText"),
+      destroyBar: document.querySelector("#destroyBar"),
+      timerText: document.querySelector("#timerText"),
+      battleLog: document.querySelector("#battleLog"),
+      restartButton: document.querySelector("#restartButton"),
+      statusBadge: document.querySelector("#statusBadge"),
+      unitList: document.querySelector("#unitList"),
+      buildList: document.querySelector("#buildList"),
+      systemMapButton: document.querySelector("#systemMapButton"),
+      customMapButton: document.querySelector("#customMapButton"),
+      startAttackButton: document.querySelector("#startAttackButton"),
+      clearLayoutButton: document.querySelector("#clearLayoutButton"),
+      saveLayoutButton: document.querySelector("#saveLayoutButton"),
+      loadLayoutButton: document.querySelector("#loadLayoutButton"),
+    };
+
+    const TILE = 32;
+    const WORLD_WIDTH = 2200;
+    const WORLD_HEIGHT = 1400;
+    const COLS = Math.ceil(WORLD_WIDTH / TILE);
+    const ROWS = Math.ceil(WORLD_HEIGHT / TILE);
+    const LAYOUT_STORAGE_KEY = "rtsgame0.customLayout.v1";
+
+    const map = {
+      width: WORLD_WIDTH,
+      height: WORLD_HEIGHT,
+      baseZone: { x: 732, y: 408, w: 736, h: 544 },
+      deployZones: [
+        { name: "上方", x: 0, y: 0, w: WORLD_WIDTH, h: 128 },
+        { name: "下方", x: 0, y: WORLD_HEIGHT - 128, w: WORLD_WIDTH, h: 128 },
+        { name: "左侧", x: 0, y: 128, w: 160, h: WORLD_HEIGHT - 256 },
+        { name: "右侧", x: WORLD_WIDTH - 160, y: 128, w: 160, h: WORLD_HEIGHT - 256 },
+      ],
+      mud: [
+        { x: 798, y: 580, w: 165, h: 118 },
+        { x: 1238, y: 828, w: 210, h: 88 },
+        { x: 1388, y: 438, w: 150, h: 102 },
+        { x: 330, y: 865, w: 220, h: 120 },
+        { x: 1630, y: 260, w: 250, h: 110 },
+      ],
+    };
+
+    const unitDefs = {
+      infantry: {
+        name: "近战步兵",
+        mark: "兵",
+        note: "便宜耐用，近身拆建筑。",
+        color: "#376b57",
+        count: 12,
+        radius: 15,
+        hp: 120,
+        speed: 82,
+        damage: 16,
+        attackRange: 46,
+        attackCooldown: .62,
+        targetPriority: "nearest",
+        projectile: false,
+        sound: "melee",
+      },
+      ranger: {
+        name: "远程射手",
+        mark: "射",
+        note: "血少射程远，适合后排输出。",
+        color: "#3f6f9b",
+        count: 8,
+        radius: 13,
+        hp: 72,
+        speed: 74,
+        damage: 13,
+        attackRange: 155,
+        attackCooldown: .86,
+        targetPriority: "nearest",
+        projectile: true,
+        projectileSpeed: 500,
+        sound: "shoot",
+      },
+      tank: {
+        name: "重装坦克",
+        mark: "坦",
+        note: "血厚速度慢，优先压制防御。",
+        color: "#6a7178",
+        count: 3,
+        radius: 20,
+        hp: 380,
+        speed: 48,
+        damage: 34,
+        attackRange: 92,
+        attackCooldown: 1.15,
+        targetPriority: "defense",
+        projectile: true,
+        projectileSpeed: 380,
+        splashRadius: 28,
+        sound: "shoot",
+      },
+    };
+
+    const structureDefs = {
+      store: { name: "仓库", kind: "normal", hp: 190, w: 104, h: 82 },
+      barrack: { name: "兵营", kind: "normal", hp: 230, w: 112, h: 88, spawnDefenders: ["infantry", "infantry", "infantry", "ranger"] },
+      vault: { name: "金库", kind: "normal", hp: 240, w: 116, h: 92 },
+      house: { name: "民房", kind: "normal", hp: 175, w: 102, h: 78 },
+      tower: {
+        name: "箭塔",
+        kind: "defense",
+        hp: 175,
+        w: 76,
+        h: 76,
+        range: 218,
+        damage: 13,
+        cooldown: .78,
+        projectileSpeed: 430,
+        sound: "shoot",
+      },
+      machineGun: {
+        name: "机枪塔",
+        kind: "defense",
+        hp: 190,
+        w: 78,
+        h: 76,
+        range: 250,
+        damage: 11,
+        cooldown: .18,
+        projectileSpeed: 760,
+        sound: "shoot",
+      },
+      cannon: {
+        name: "炮塔",
+        kind: "defense",
+        hp: 260,
+        w: 86,
+        h: 86,
+        range: 235,
+        damage: 36,
+        cooldown: 1.18,
+        projectileSpeed: 410,
+        splashRadius: 58,
+        sound: "cannon",
+      },
+      wall: { name: "木墙", kind: "wall", hp: 95, w: 46, h: 46 },
+    };
+
+    const buildPalette = [
+      { type: "house", mark: "民", color: "#d29a2e", note: "普通建筑，计入摧毁目标。" },
+      { type: "store", mark: "仓", color: "#b98242", note: "普通建筑，血量中等。" },
+      { type: "barrack", mark: "营", color: "#aa7a35", note: "被摧毁时会爆出防御者。" },
+      { type: "tower", mark: "塔", color: "#d94f45", note: "基础单体防御。" },
+      { type: "machineGun", mark: "机", color: "#d8a537", note: "高射速，克制步兵。" },
+      { type: "cannon", mark: "炮", color: "#69747e", note: "范围伤害，克制扎堆。" },
+      { type: "wall", mark: "墙", color: "#866d55", note: "可破坏障碍，不计胜利目标。" },
+    ];
+
+    let state;
+    let lastTime = performance.now();
+    let nextId = 1;
+    let audioCtx = null;
+    let audioReady = false;
+    const soundGate = {};
+
+    function createInitialState(scenario = "system") {
+      nextId = 1;
+      const isCustom = scenario === "custom";
+      return {
+        scenario,
+        phase: isCustom ? "editing" : "playing",
+        selectedUnit: "infantry",
+        selectedBuild: "house",
+        unitStock: Object.fromEntries(Object.entries(unitDefs).map(([key, def]) => [key, def.count])),
+        units: [],
+        projectiles: [],
+        effects: [],
+        elapsed: 0,
+        camera: { x: 460, y: 300 },
+        pointer: { down: false, dragged: false, startX: 0, startY: 0, lastX: 0, lastY: 0 },
+        log: isCustom ? "自定义布防：选择建筑，在基地黄色区域内点击摆放。" : "选择兵种后，在地图四周绿色区域部署。",
+        resultSoundPlayed: false,
+        structures: isCustom ? loadSavedLayoutStructures() : createSystemStructures(),
+        obstacles: [
+          { type: "rock", x: 846, y: 446, r: 32 },
+          { type: "rock", x: 1530, y: 690, r: 36 },
+          { type: "rock", x: 730, y: 828, r: 34 },
+          { type: "tree", x: 890, y: 890, r: 30 },
+          { type: "tree", x: 1580, y: 900, r: 34 },
+          { type: "tree", x: 644, y: 548, r: 30 },
+          { type: "tree", x: 1570, y: 450, r: 30 },
+          { type: "rock", x: 340, y: 430, r: 38 },
+          { type: "tree", x: 1870, y: 1080, r: 36 },
+          { type: "rock", x: 1760, y: 300, r: 34 },
+        ],
+      };
+    }
+
+    function createSystemStructures() {
+      return [
+        makeStructure("store", 960, 460),
+        makeStructure("barrack", 1215, 448),
+        makeStructure("vault", 1440, 540),
+        makeStructure("house", 1090, 834),
+        makeStructure("tower", 970, 700),
+        makeStructure("machineGun", 1280, 685),
+        makeStructure("cannon", 1435, 790),
+        makeStructure("wall", 1110, 582),
+        makeStructure("wall", 1164, 582),
+        makeStructure("wall", 1218, 582),
+        makeStructure("wall", 1272, 582),
+        makeStructure("wall", 1110, 636),
+        makeStructure("wall", 1272, 636),
+        makeStructure("wall", 1110, 690),
+        makeStructure("wall", 1164, 690),
+        makeStructure("wall", 1218, 690),
+        makeStructure("wall", 1272, 690),
+      ];
+    }
+
+    function makeStructure(type, x, y) {
+      const def = structureDefs[type];
+      return {
+        id: `structure-${nextId++}`,
+        type,
+        name: def.name,
+        kind: def.kind,
+        x,
+        y,
+        w: def.w,
+        h: def.h,
+        hp: def.hp,
+        maxHp: def.hp,
+        cooldown: .25 + Math.random() * .35,
+        alive: true,
+      };
+    }
+
+    function resetGame(scenario = state ? state.scenario : "system") {
+      state = createInitialState(scenario);
+      clampCamera();
+      lastTime = performance.now();
+      renderUnitButtons();
+      renderBuildButtons();
+      log(state.log);
+      updateUi();
+    }
+
+    function renderUnitButtons() {
+      ui.unitList.innerHTML = "";
+      for (const [type, def] of Object.entries(unitDefs)) {
+        const button = document.createElement("button");
+        button.className = "unit-option";
+        button.type = "button";
+        button.dataset.unit = type;
+        button.innerHTML = `
+          <span class="unit-icon" style="background:${def.color}">${def.mark}</span>
+          <span class="unit-copy">
+            <h2>${def.name}</h2>
+            <p>${def.note}</p>
+          </span>
+          <span class="unit-count" data-count="${type}">${def.count}</span>
+        `;
+        button.addEventListener("click", () => {
+          state.selectedUnit = type;
+          log(`已选择 ${def.name}，可在四面绿色部署区放置。`);
+          updateUi();
+        });
+        ui.unitList.appendChild(button);
+      }
+    }
+
+    function renderBuildButtons() {
+      ui.buildList.innerHTML = "";
+      for (const item of buildPalette) {
+        const def = structureDefs[item.type];
+        const button = document.createElement("button");
+        button.className = "build-option";
+        button.type = "button";
+        button.dataset.build = item.type;
+        button.innerHTML = `
+          <span class="build-icon" style="background:${item.color}">${item.mark}</span>
+          <span class="build-copy">
+            <h2>${def.name}</h2>
+            <p>${item.note}</p>
+          </span>
+          <span class="build-size">${def.w}x${def.h}</span>
+        `;
+        button.addEventListener("click", () => {
+          state.selectedBuild = item.type;
+          log(`已选择 ${def.name}，在基地黄色区域内点击摆放。`);
+          updateUi();
+        });
+        ui.buildList.appendChild(button);
+      }
+    }
+
+    function unlockAudio() {
+      if (audioReady) return;
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      audioCtx = audioCtx || new AudioContext();
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      audioReady = true;
+    }
+
+    function playSound(name) {
+      if (!audioCtx || !audioReady) return;
+      const now = audioCtx.currentTime;
+      if (soundGate[name] && now - soundGate[name] < .045) return;
+      soundGate[name] = now;
+
+      const master = audioCtx.createGain();
+      master.gain.setValueAtTime(.001, now);
+      master.gain.exponentialRampToValueAtTime(soundVolume(name), now + .012);
+      master.gain.exponentialRampToValueAtTime(.001, now + soundLength(name));
+      master.connect(audioCtx.destination);
+
+      if (name === "destroy" || name === "cannon" || name === "hit") {
+        const noise = audioCtx.createBufferSource();
+        const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * .18, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < data.length; i += 1) {
+          data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+        }
+        noise.buffer = buffer;
+        noise.connect(master);
+        noise.start(now);
+        noise.stop(now + soundLength(name));
+      }
+
+      const osc = audioCtx.createOscillator();
+      osc.type = soundWave(name);
+      osc.frequency.setValueAtTime(soundFreq(name), now);
+      osc.frequency.exponentialRampToValueAtTime(Math.max(40, soundFreq(name) * .55), now + soundLength(name));
+      osc.connect(master);
+      osc.start(now);
+      osc.stop(now + soundLength(name));
+    }
+
+    function soundFreq(name) {
+      return { melee: 190, shoot: 520, cannon: 110, hit: 145, destroy: 90, win: 660, lose: 170 }[name] || 220;
+    }
+
+    function soundLength(name) {
+      return { melee: .09, shoot: .08, cannon: .22, hit: .13, destroy: .38, win: .42, lose: .48 }[name] || .12;
+    }
+
+    function soundVolume(name) {
+      return { melee: .045, shoot: .035, cannon: .075, hit: .038, destroy: .08, win: .05, lose: .05 }[name] || .04;
+    }
+
+    function soundWave(name) {
+      return name === "win" ? "triangle" : name === "shoot" ? "square" : "sawtooth";
+    }
+
+    function log(message) {
+      state.log = message;
+      ui.battleLog.textContent = message;
+    }
+
+    function getPointerPosition(event) {
+      const rect = canvas.getBoundingClientRect();
+      const screen = {
+        x: (event.clientX - rect.left) * (canvas.width / rect.width),
+        y: (event.clientY - rect.top) * (canvas.height / rect.height),
+      };
+      return screenToWorld(screen);
+    }
+
+    function getScreenPointerPosition(event) {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: (event.clientX - rect.left) * (canvas.width / rect.width),
+        y: (event.clientY - rect.top) * (canvas.height / rect.height),
+      };
+    }
+
+    function screenToWorld(point) {
+      return {
+        x: point.x + state.camera.x,
+        y: point.y + state.camera.y,
+      };
+    }
+
+    function clampCamera() {
+      if (!state || !state.camera) return;
+      state.camera.x = clamp(state.camera.x, 0, Math.max(0, map.width - canvas.width));
+      state.camera.y = clamp(state.camera.y, 0, Math.max(0, map.height - canvas.height));
+    }
+
+    function isInsideRect(point, rect) {
+      return point.x >= rect.x && point.x <= rect.x + rect.w && point.y >= rect.y && point.y <= rect.y + rect.h;
+    }
+
+    function isInDeployZone(point) {
+      return map.deployZones.some((zone) => isInsideRect(point, zone));
+    }
+
+    function isBlockedAt(point) {
+      const r = 20;
+      return state.structures.some((s) => s.alive && rectCircleOverlap(s, point.x, point.y, r)) ||
+        state.obstacles.some((o) => Math.hypot(point.x - o.x, point.y - o.y) < o.r + r);
+    }
+
+    function deployUnit(point) {
+      if (state.phase !== "playing") return;
+      unlockAudio();
+
+      const type = state.selectedUnit;
+      const def = unitDefs[type];
+      if (state.unitStock[type] <= 0) {
+        log(`${def.name} 已经全部部署。`);
+        return;
+      }
+      if (!isInDeployZone(point)) {
+        log("现在四面绿色边缘区域都可以部署，基地内部不能直接放置。");
+        return;
+      }
+      if (isBlockedAt(point)) {
+        log("这里被建筑或障碍占用，换一个落点。");
+        return;
+      }
+
+      state.unitStock[type] -= 1;
+      state.units.push(makeUnit(type, point.x, point.y, "attacker"));
+      log(`已部署 ${def.name}，剩余 ${state.unitStock[type]} 个。`);
+      updateUi();
+    }
+
+    function makeUnit(type, x, y, team) {
+      const def = unitDefs[type];
+      return {
+        id: `unit-${nextId++}`,
+        type,
+        team,
+        x,
+        y,
+        hp: def.hp,
+        maxHp: def.hp,
+        cooldown: .1,
+        acquireTimer: 0,
+        pathTimer: 0,
+        path: [],
+        targetId: null,
+        alive: true,
+        swing: Math.random() * Math.PI * 2,
+        slowTimer: 0,
+      };
+    }
+
+    function placeStructure(point) {
+      if (state.phase !== "editing") return;
+      const type = state.selectedBuild;
+      const def = structureDefs[type];
+      const snapped = snapPlacementPoint(point);
+      const candidate = {
+        x: snapped.x - def.w / 2,
+        y: snapped.y - def.h / 2,
+        w: def.w,
+        h: def.h,
+      };
+
+      const validation = validateStructurePlacement(candidate);
+      if (!validation.ok) {
+        log(validation.message);
+        return;
+      }
+
+      state.structures.push(makeStructure(type, candidate.x, candidate.y));
+      log(`已摆放 ${def.name}。`);
+      updateUi();
+    }
+
+    function snapPlacementPoint(point) {
+      return {
+        x: Math.round(point.x / TILE) * TILE,
+        y: Math.round(point.y / TILE) * TILE,
+      };
+    }
+
+    function validateStructurePlacement(rect) {
+      const paddedBase = inflatedRect(map.baseZone, -8);
+      const corners = [
+        { x: rect.x, y: rect.y },
+        { x: rect.x + rect.w, y: rect.y },
+        { x: rect.x, y: rect.y + rect.h },
+        { x: rect.x + rect.w, y: rect.y + rect.h },
+      ];
+      if (!corners.every((corner) => pointInsideRect(corner, paddedBase))) {
+        return { ok: false, message: "建筑只能摆在基地黄色区域内。" };
+      }
+      if (state.structures.some((structure) => structure.alive && rectsOverlap(inflatedRect(rect, 4), inflatedRect(structure, 4)))) {
+        return { ok: false, message: "这里已经有建筑或墙体了。" };
+      }
+      if (state.obstacles.some((obstacle) => rectCircleOverlap(rect, obstacle.x, obstacle.y, obstacle.r + 8))) {
+        return { ok: false, message: "这里有石头或树林挡住。" };
+      }
+      return { ok: true, message: "" };
+    }
+
+    function startAttack() {
+      if (state.phase !== "editing") return;
+      const targets = state.structures.filter((structure) => structure.kind !== "wall");
+      if (targets.length === 0) {
+        log("至少摆放一个民房、仓库或防御建筑，才能开始进攻。");
+        return;
+      }
+      state.phase = "playing";
+      state.elapsed = 0;
+      state.units = [];
+      state.projectiles = [];
+      state.effects = [];
+      state.unitStock = Object.fromEntries(Object.entries(unitDefs).map(([key, def]) => [key, def.count]));
+      log("布防完成。现在选择兵种，在四面绿色区域部署进攻单位。");
+      updateUi();
+    }
+
+    function clearCustomLayout() {
+      if (state.scenario !== "custom") return;
+      state.structures = [];
+      state.units = [];
+      state.projectiles = [];
+      state.effects = [];
+      state.phase = "editing";
+      state.elapsed = 0;
+      log("已清空布防，继续摆放建筑。");
+      updateUi();
+    }
+
+    function saveCustomLayout() {
+      if (state.scenario !== "custom") return;
+      const layout = state.structures
+        .filter((structure) => structure.alive)
+        .map((structure) => ({ type: structure.type, x: structure.x, y: structure.y }));
+      localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(layout));
+      log(`已保存 ${layout.length} 个建筑/墙体。`);
+    }
+
+    function loadCustomLayout() {
+      if (state.scenario !== "custom") return;
+      state.structures = loadSavedLayoutStructures();
+      state.units = [];
+      state.projectiles = [];
+      state.effects = [];
+      state.phase = "editing";
+      state.elapsed = 0;
+      log(state.structures.length ? "已读取保存的自定义布局。" : "还没有保存过自定义布局。");
+      updateUi();
+    }
+
+    function loadSavedLayoutStructures() {
+      try {
+        const raw = localStorage.getItem(LAYOUT_STORAGE_KEY);
+        if (!raw) return [];
+        const layout = JSON.parse(raw);
+        if (!Array.isArray(layout)) return [];
+        return layout
+          .filter((item) => structureDefs[item.type] && Number.isFinite(item.x) && Number.isFinite(item.y))
+          .map((item) => makeStructure(item.type, item.x, item.y));
+      } catch (error) {
+        return [];
+      }
+    }
+
+    function handleCanvasClick(point) {
+      if (state.phase === "editing") {
+        placeStructure(point);
+      } else {
+        deployUnit(point);
+      }
+    }
+
+    function handlePointerDown(event) {
+      const point = getScreenPointerPosition(event);
+      state.pointer.down = true;
+      state.pointer.dragged = false;
+      state.pointer.startX = point.x;
+      state.pointer.startY = point.y;
+      state.pointer.lastX = point.x;
+      state.pointer.lastY = point.y;
+      canvas.setPointerCapture?.(event.pointerId);
+    }
+
+    function handlePointerMove(event) {
+      if (!state.pointer.down) return;
+      const point = getScreenPointerPosition(event);
+      const dx = point.x - state.pointer.lastX;
+      const dy = point.y - state.pointer.lastY;
+      const total = Math.hypot(point.x - state.pointer.startX, point.y - state.pointer.startY);
+      if (total > 5) state.pointer.dragged = true;
+      if (state.pointer.dragged) {
+        state.camera.x -= dx;
+        state.camera.y -= dy;
+        clampCamera();
+      }
+      state.pointer.lastX = point.x;
+      state.pointer.lastY = point.y;
+    }
+
+    function handlePointerUp(event) {
+      if (!state.pointer.down) return;
+      const point = getScreenPointerPosition(event);
+      const wasDragged = state.pointer.dragged;
+      state.pointer.down = false;
+      canvas.releasePointerCapture?.(event.pointerId);
+      if (!wasDragged) handleCanvasClick(screenToWorld(point));
+    }
+
+    function update(dt) {
+      if (state.phase !== "playing") {
+        updateProjectiles(dt);
+        updateEffects(dt);
+        return;
+      }
+
+      state.elapsed += dt;
+      updateUnits(dt);
+      updateDefenseStructures(dt);
+      updateProjectiles(dt);
+      updateEffects(dt);
+      removeDeadEntities();
+      checkBattleEnd();
+      updateUi();
+    }
+
+    function updateUnits(dt) {
+      for (const unit of state.units) {
+        if (!unit.alive) continue;
+        const def = unitDefs[unit.type];
+        unit.cooldown = Math.max(0, unit.cooldown - dt);
+        unit.acquireTimer -= dt;
+        unit.pathTimer -= dt;
+        unit.swing += dt * 8;
+        unit.slowTimer = Math.max(0, unit.slowTimer - dt);
+
+        let target = findLiveTargetById(unit.targetId);
+        if (!target || unit.acquireTimer <= 0) {
+          target = findTargetForUnit(unit);
+          unit.targetId = target ? target.id : null;
+          unit.acquireTimer = .35;
+          unit.pathTimer = 0;
+        }
+        if (!target) continue;
+
+        const distance = attackDistanceToTarget(unit, target);
+        if (distance <= def.attackRange) {
+          unit.path = [];
+          if (unit.cooldown <= 0) {
+            performUnitAttack(unit, target);
+            unit.cooldown = def.attackCooldown;
+          }
+          continue;
+        }
+
+        if (unit.pathTimer <= 0 || unit.path.length === 0) {
+          unit.path = findPathToTarget(unit, target);
+          unit.pathTimer = .55;
+          if (unit.team === "attacker" && target.kind && target.kind !== "wall" && unit.path.length === 0) {
+            const wall = findNearestAliveWall(unit);
+            if (wall) {
+              unit.targetId = wall.id;
+              target = wall;
+              unit.path = findPathToTarget(unit, wall);
+            }
+          }
+        }
+        moveUnitAlongPath(unit, dt);
+      }
+    }
+
+    function performUnitAttack(unit, target) {
+      const def = unitDefs[unit.type];
+      if (def.projectile) {
+        const c = target.kind ? centerOf(target) : target;
+        state.projectiles.push({
+          x: unit.x,
+          y: unit.y,
+          target,
+          source: "unit",
+          speed: def.projectileSpeed,
+          damage: def.damage,
+          splashRadius: def.splashRadius || 0,
+          splashTeam: target.team || null,
+          color: unit.type === "tank" ? "#33383d" : "#f3d06a",
+          alive: true,
+        });
+        state.effects.push({ type: "muzzle", x: unit.x, y: unit.y, tx: c.x, ty: c.y, life: .1, maxLife: .1 });
+        playSound(def.sound);
+      } else {
+        if (target.kind) damageStructure(target, def.damage);
+        else damageUnit(target, def.damage);
+        const c = target.kind ? centerOf(target) : target;
+        state.effects.push({ type: "slash", x: c.x, y: c.y, life: .18, maxLife: .18 });
+        playSound(def.sound);
+      }
+    }
+
+    function updateDefenseStructures(dt) {
+      for (const structure of state.structures) {
+        if (!structure.alive || structure.kind !== "defense") continue;
+        const def = structureDefs[structure.type];
+        structure.cooldown = Math.max(0, structure.cooldown - dt);
+        if (structure.cooldown > 0) continue;
+
+        const origin = centerOf(structure);
+        let target = null;
+        let best = Infinity;
+        for (const unit of state.units) {
+          if (!unit.alive || unit.team !== "attacker") continue;
+          const distance = distanceBetween(origin, unit);
+          if (distance <= def.range && distance < best) {
+            target = unit;
+            best = distance;
+          }
+        }
+
+        if (!target) continue;
+        structure.cooldown = def.cooldown;
+        state.projectiles.push({
+          x: origin.x,
+          y: origin.y,
+          target,
+          source: "defense",
+          speed: def.projectileSpeed,
+          damage: def.damage,
+          splashRadius: def.splashRadius || 0,
+          splashTeam: "attacker",
+          color: structure.type === "machineGun" ? "#ffdf7c" : structure.type === "cannon" ? "#2e3033" : "#4d342f",
+          alive: true,
+        });
+        playSound(def.sound);
+      }
+    }
+
+    function updateProjectiles(dt) {
+      for (const projectile of state.projectiles) {
+        if (!projectile.alive) continue;
+        if (!projectile.target.alive) {
+          projectile.alive = false;
+          continue;
+        }
+
+        const targetPoint = projectile.target.w ? centerOf(projectile.target) : projectile.target;
+        const dx = targetPoint.x - projectile.x;
+        const dy = targetPoint.y - projectile.y;
+        const distance = Math.hypot(dx, dy);
+        const step = projectile.speed * dt;
+
+        if (distance <= step + 4) {
+          if (projectile.target.kind) {
+            damageStructure(projectile.target, projectile.damage);
+            if (projectile.splashRadius) {
+              damageStructuresInRadius(targetPoint, projectile.splashRadius, Math.round(projectile.damage * .45), projectile.target.id);
+            }
+          } else {
+            damageUnit(projectile.target, projectile.damage);
+            if (projectile.splashRadius) {
+              damageUnitsInRadius(targetPoint, projectile.splashRadius, Math.round(projectile.damage * .45), projectile.target.id, projectile.splashTeam);
+            }
+          }
+          state.effects.push({
+            type: projectile.splashRadius ? "boom" : "hit",
+            x: targetPoint.x,
+            y: targetPoint.y,
+            life: projectile.splashRadius ? .35 : .16,
+            maxLife: projectile.splashRadius ? .35 : .16,
+          });
+          playSound(projectile.splashRadius ? "cannon" : "hit");
+          projectile.alive = false;
+        } else {
+          projectile.x += dx / Math.max(.001, distance) * step;
+          projectile.y += dy / Math.max(.001, distance) * step;
+        }
+      }
+    }
+
+    function updateEffects(dt) {
+      for (const effect of state.effects) effect.life -= dt;
+      state.effects = state.effects.filter((effect) => effect.life > 0);
+    }
+
+    function damageStructure(structure, amount) {
+      if (!structure.alive) return;
+      structure.hp -= amount;
+      if (structure.hp <= 0) {
+        structure.hp = 0;
+        structure.alive = false;
+        state.effects.push({ type: "collapse", x: structure.x + structure.w / 2, y: structure.y + structure.h / 2, life: .75, maxLife: .75 });
+        spawnDefendersFromStructure(structure);
+        playSound("destroy");
+        log(`${structure.name} 被摧毁。`);
+        for (const unit of state.units) {
+          if (unit.targetId === structure.id) {
+            unit.targetId = null;
+            unit.path = [];
+          }
+        }
+      }
+    }
+
+    function spawnDefendersFromStructure(structure) {
+      const def = structureDefs[structure.type];
+      if (!def.spawnDefenders || structure.defendersSpawned) return;
+      structure.defendersSpawned = true;
+      const center = centerOf(structure);
+      const offsets = [
+        { x: -34, y: -20 }, { x: 34, y: -20 }, { x: -28, y: 28 },
+        { x: 28, y: 28 }, { x: 0, y: -46 }, { x: 0, y: 48 },
+      ];
+      def.spawnDefenders.forEach((type, index) => {
+        const offset = offsets[index % offsets.length];
+        const x = clamp(center.x + offset.x, 12, map.width - 12);
+        const y = clamp(center.y + offset.y, 12, map.height - 12);
+        state.units.push(makeUnit(type, x, y, "defender"));
+      });
+      state.effects.push({ type: "boom", x: center.x, y: center.y, life: .35, maxLife: .35 });
+    }
+
+    function damageStructuresInRadius(point, radius, amount, exceptId) {
+      for (const structure of state.structures) {
+        if (!structure.alive || structure.id === exceptId) continue;
+        if (distanceBetween(point, centerOf(structure)) <= radius) damageStructure(structure, amount);
+      }
+    }
+
+    function damageUnit(unit, amount) {
+      if (!unit.alive) return;
+      unit.hp -= amount;
+      if (unit.hp <= 0) {
+        unit.hp = 0;
+        unit.alive = false;
+        state.effects.push({ type: "poof", x: unit.x, y: unit.y, life: .34, maxLife: .34 });
+        playSound("hit");
+      }
+    }
+
+    function damageUnitsInRadius(point, radius, amount, exceptId, team = null) {
+      for (const unit of state.units) {
+        if (!unit.alive || unit.id === exceptId) continue;
+        if (team && unit.team !== team) continue;
+        if (distanceBetween(point, unit) <= radius) damageUnit(unit, amount);
+      }
+    }
+
+    function removeDeadEntities() {
+      state.projectiles = state.projectiles.filter((projectile) => projectile.alive);
+    }
+
+    function checkBattleEnd() {
+      const targetStructures = state.structures.filter((s) => s.kind !== "wall");
+      const aliveTargets = targetStructures.filter((s) => s.alive).length;
+      const aliveUnits = state.units.filter((unit) => unit.alive && unit.team === "attacker").length;
+      const stockLeft = Object.values(state.unitStock).reduce((sum, value) => sum + value, 0);
+      const timedOut = state.elapsed >= 180;
+
+      if (aliveTargets === 0) {
+        state.phase = "victory";
+        log("胜利！主要建筑已经全部摧毁。");
+        playResultSound("win");
+      } else if ((stockLeft === 0 && aliveUnits === 0) || timedOut) {
+        state.phase = "defeat";
+        log(timedOut ? "时间耗尽，进攻失败。" : "所有单位阵亡，进攻失败。");
+        playResultSound("lose");
+      }
+    }
+
+    function playResultSound(name) {
+      if (state.resultSoundPlayed) return;
+      state.resultSoundPlayed = true;
+      playSound(name);
+    }
+
+    function findTargetForUnit(unit) {
+      const def = unitDefs[unit.type];
+      if (unit.team === "defender") {
+        return findNearestEnemyUnit(unit, "attacker");
+      }
+
+      const closeDefender = findNearestEnemyUnit(unit, "defender");
+      if (closeDefender && distanceBetween(unit, closeDefender) < 210) return closeDefender;
+
+      let best = null;
+      let bestScore = Infinity;
+      for (const structure of state.structures) {
+        if (!structure.alive) continue;
+        const distance = attackDistanceToTarget(unit, structure);
+        let score = distance;
+        if (def.targetPriority === "defense") {
+          if (structure.kind === "defense") score -= 210;
+          if (structure.kind === "wall") score += 80;
+        } else if (structure.kind === "wall") {
+          score += unit.type === "infantry" ? -8 : 45;
+        }
+        if (score < bestScore) {
+          bestScore = score;
+          best = structure;
+        }
+      }
+      return best;
+    }
+
+    function findLiveTargetById(id) {
+      if (!id) return null;
+      return state.structures.find((structure) => structure.id === id && structure.alive) ||
+        state.units.find((unit) => unit.id === id && unit.alive) ||
+        null;
+    }
+
+    function findNearestEnemyUnit(unit, enemyTeam) {
+      let best = null;
+      let bestDistance = Infinity;
+      for (const other of state.units) {
+        if (!other.alive || other.team !== enemyTeam) continue;
+        const distance = distanceBetween(unit, other);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = other;
+        }
+      }
+      return best;
+    }
+
+    function findNearestAliveWall(unit) {
+      let best = null;
+      let bestDistance = Infinity;
+      for (const wall of state.structures) {
+        if (!wall.alive || wall.kind !== "wall") continue;
+        const distance = distanceBetween(unit, centerOf(wall));
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = wall;
+        }
+      }
+      return best;
+    }
+
+    function findPathToTarget(unit, target) {
+      if (!target.kind) return findPathToUnit(unit, target);
+      return findPathToStructure(unit, target);
+    }
+
+    function findPathToUnit(unit, targetUnit) {
+      const start = worldToCell(unit.x, unit.y);
+      const target = worldToCell(targetUnit.x, targetUnit.y);
+      const cells = [];
+      for (let c = target.c - 2; c <= target.c + 2; c += 1) {
+        for (let r = target.r - 2; r <= target.r + 2; r += 1) {
+          const p = cellCenter(c, r);
+          if (isCellInside(c, r) && isWalkableCell(c, r) && distanceBetween(p, targetUnit) <= unitDefs[unit.type].attackRange) {
+            cells.push({ c, r });
+          }
+        }
+      }
+      if (cells.length === 0) return [];
+      cells.sort((a, b) => distanceCells(start, a) - distanceCells(start, b));
+      return aStar(start, cells.slice(0, 12));
+    }
+
+    function findPathToStructure(unit, structure) {
+      const start = worldToCell(unit.x, unit.y);
+      const goals = cellsInAttackRange(unit, structure)
+        .filter((cell) => isCellInside(cell.c, cell.r) && isWalkableCell(cell.c, cell.r));
+      if (goals.length === 0) return [];
+      goals.sort((a, b) => distanceCells(start, a) - distanceCells(start, b));
+      return aStar(start, goals.slice(0, 16));
+    }
+
+    function cellsInAttackRange(unit, target) {
+      const range = unitDefs[unit.type].attackRange;
+      const min = worldToCell(target.x - range - TILE, target.y - range - TILE);
+      const max = worldToCell(target.x + target.w + range + TILE, target.y + target.h + range + TILE);
+      const cells = [];
+      for (let c = min.c; c <= max.c; c += 1) {
+        for (let r = min.r; r <= max.r; r += 1) {
+          const p = cellCenter(c, r);
+          if (attackDistanceFromPointToTarget(p, target) <= range * .92) cells.push({ c, r });
+        }
+      }
+      if (cells.length > 0) return cells;
+      return cellsAroundRect(target, TILE);
+    }
+
+    function aStar(start, goals) {
+      const goalKeySet = new Set(goals.map((g) => cellKey(g.c, g.r)));
+      const open = [{ c: start.c, r: start.r, g: 0, f: 0, parent: null }];
+      const best = new Map([[cellKey(start.c, start.r), 0]]);
+      const dirs = [
+        [1, 0], [-1, 0], [0, 1], [0, -1],
+        [1, 1], [1, -1], [-1, 1], [-1, -1],
+      ];
+
+      while (open.length > 0) {
+        open.sort((a, b) => a.f - b.f);
+        const current = open.shift();
+        if (goalKeySet.has(cellKey(current.c, current.r))) {
+          return reconstructPath(current);
+        }
+
+        for (const [dc, dr] of dirs) {
+          const c = current.c + dc;
+          const r = current.r + dr;
+          if (!isCellInside(c, r) || !isWalkableCell(c, r)) continue;
+          if (dc !== 0 && dr !== 0 && (!isWalkableCell(current.c + dc, current.r) || !isWalkableCell(current.c, current.r + dr))) continue;
+          const stepCost = (dc !== 0 && dr !== 0 ? 1.42 : 1) * terrainCostForCell(c, r);
+          const g = current.g + stepCost;
+          const key = cellKey(c, r);
+          if (best.has(key) && best.get(key) <= g) continue;
+          best.set(key, g);
+          const h = Math.min(...goals.map((goal) => distanceCells({ c, r }, goal)));
+          open.push({ c, r, g, f: g + h, parent: current });
+        }
+      }
+      return [];
+    }
+
+    function reconstructPath(node) {
+      const path = [];
+      let current = node;
+      while (current.parent) {
+        path.unshift(cellCenter(current.c, current.r));
+        current = current.parent;
+      }
+      return path;
+    }
+
+    function moveUnitAlongPath(unit, dt) {
+      const def = unitDefs[unit.type];
+      if (unit.path.length === 0) return;
+      const target = unit.path[0];
+      const dx = target.x - unit.x;
+      const dy = target.y - unit.y;
+      const distance = Math.hypot(dx, dy);
+      if (distance < 5) {
+        unit.path.shift();
+        return;
+      }
+
+      const speedMultiplier = terrainCostAtPoint(unit.x, unit.y) > 1 ? .58 : 1;
+      const step = Math.min(def.speed * speedMultiplier * dt, distance);
+      unit.x += dx / distance * step;
+      unit.y += dy / distance * step;
+      unit.x = clamp(unit.x, 12, map.width - 12);
+      unit.y = clamp(unit.y, 12, map.height - 12);
+    }
+
+    function isWalkableCell(c, r) {
+      const p = cellCenter(c, r);
+      if (state.obstacles.some((o) => Math.hypot(p.x - o.x, p.y - o.y) < o.r + 8)) return false;
+      return !state.structures.some((s) => {
+        if (!s.alive) return false;
+        return pointInsideRect(p, inflatedRect(s, s.kind === "wall" ? 1 : 5));
+      });
+    }
+
+    function terrainCostForCell(c, r) {
+      const p = cellCenter(c, r);
+      return terrainCostAtPoint(p.x, p.y);
+    }
+
+    function terrainCostAtPoint(x, y) {
+      return map.mud.some((rect) => pointInsideRect({ x, y }, rect)) ? 1.75 : 1;
+    }
+
+    function cellsAroundRect(rect, padding = TILE) {
+      const min = worldToCell(rect.x - padding, rect.y - padding);
+      const max = worldToCell(rect.x + rect.w + padding, rect.y + rect.h + padding);
+      const cells = [];
+      for (let c = min.c; c <= max.c; c += 1) {
+        for (let r = min.r; r <= max.r; r += 1) {
+          const p = cellCenter(c, r);
+          if (!pointInsideRect(p, inflatedRect(rect, 2)) && rectCircleOverlap(inflatedRect(rect, padding), p.x, p.y, 1)) {
+            cells.push({ c, r });
+          }
+        }
+      }
+      return cells;
+    }
+
+    function worldToCell(x, y) {
+      return {
+        c: clamp(Math.floor(x / TILE), 0, COLS - 1),
+        r: clamp(Math.floor(y / TILE), 0, ROWS - 1),
+      };
+    }
+
+    function cellCenter(c, r) {
+      return { x: c * TILE + TILE / 2, y: r * TILE + TILE / 2 };
+    }
+
+    function isCellInside(c, r) {
+      return c >= 0 && c < COLS && r >= 0 && r < ROWS;
+    }
+
+    function cellKey(c, r) {
+      return `${c},${r}`;
+    }
+
+    function distanceCells(a, b) {
+      return Math.hypot(a.c - b.c, a.r - b.r);
+    }
+
+    function updateUi() {
+      const aliveUnits = state.units.filter((unit) => unit.alive).length;
+      const stockLeft = Object.values(state.unitStock).reduce((sum, value) => sum + value, 0);
+      const targets = state.structures.filter((s) => s.kind !== "wall");
+      const destroyed = targets.filter((s) => !s.alive).length;
+      const remaining = Math.max(0, Math.ceil(180 - state.elapsed));
+      const minutes = String(Math.floor(remaining / 60)).padStart(2, "0");
+      const seconds = String(remaining % 60).padStart(2, "0");
+
+      ui.troopsLeft.textContent = stockLeft;
+      ui.troopsAlive.textContent = aliveUnits;
+      ui.destroyedText.textContent = `${destroyed} / ${targets.length}`;
+      ui.destroyBar.style.width = `${targets.length ? destroyed / targets.length * 100 : 0}%`;
+      ui.timerText.textContent = `${minutes}:${seconds}`;
+
+      ui.systemMapButton.classList.toggle("selected", state.scenario === "system");
+      ui.customMapButton.classList.toggle("selected", state.scenario === "custom");
+      ui.buildList.style.display = state.scenario === "custom" && state.phase === "editing" ? "grid" : "none";
+      ui.startAttackButton.style.display = state.scenario === "custom" && state.phase === "editing" ? "block" : "none";
+      ui.clearLayoutButton.style.display = state.scenario === "custom" ? "block" : "none";
+      ui.saveLayoutButton.style.display = state.scenario === "custom" ? "block" : "none";
+      ui.loadLayoutButton.style.display = state.scenario === "custom" ? "block" : "none";
+      ui.unitList.style.display = state.phase === "editing" ? "none" : "grid";
+
+      for (const [type, count] of Object.entries(state.unitStock)) {
+        const countEl = ui.unitList.querySelector(`[data-count="${type}"]`);
+        const button = ui.unitList.querySelector(`[data-unit="${type}"]`);
+        if (countEl) countEl.textContent = count;
+        if (button) {
+          button.classList.toggle("selected", state.selectedUnit === type);
+          button.disabled = count <= 0;
+        }
+      }
+
+      for (const item of buildPalette) {
+        const button = ui.buildList.querySelector(`[data-build="${item.type}"]`);
+        if (button) button.classList.toggle("selected", state.selectedBuild === item.type);
+      }
+
+      if (state.phase === "editing") {
+        ui.statusBadge.textContent = "布防";
+        ui.statusBadge.style.background = "#69747e";
+      } else if (state.phase === "victory") {
+        ui.statusBadge.textContent = "胜利";
+        ui.statusBadge.style.background = "#2e7d6f";
+      } else if (state.phase === "defeat") {
+        ui.statusBadge.textContent = "失败";
+        ui.statusBadge.style.background = "#d94f45";
+      } else {
+        ui.statusBadge.textContent = stockLeft > 0 ? "部署" : "战斗";
+        ui.statusBadge.style.background = stockLeft > 0 ? "#2e7d6f" : "#d29a2e";
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.save();
+      ctx.translate(-state.camera.x, -state.camera.y);
+      drawMap();
+      drawDefenseRanges();
+      drawObstacles();
+      drawStructures();
+      drawUnits();
+      drawProjectiles();
+      drawEffects();
+      ctx.restore();
+      drawOutcome();
+    }
+
+    function drawMap() {
+      const sky = ctx.createLinearGradient(0, 0, 0, map.height);
+      sky.addColorStop(0, "#8fcf8a");
+      sky.addColorStop(1, "#6fae5f");
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, map.width, map.height);
+      drawWater();
+      drawBaseGround();
+      drawMud();
+      drawPaths();
+      drawDeployZones();
+    }
+
+    function drawWater() {
+      ctx.fillStyle = "#68afd0";
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(0, map.height);
+      ctx.bezierCurveTo(46, 700, 68, 596, 54, 488);
+      ctx.bezierCurveTo(38, 360, 84, 256, 49, 126);
+      ctx.bezierCurveTo(34, 72, 20, 32, 0, 0);
+      ctx.fill();
+
+      ctx.strokeStyle = "rgba(255, 255, 255, .35)";
+      ctx.lineWidth = 3;
+      for (let y = 80; y < map.height; y += 78) {
+        ctx.beginPath();
+        ctx.moveTo(10, y);
+        ctx.bezierCurveTo(38, y - 14, 72, y + 18, 102, y + 2);
+        ctx.stroke();
+      }
+    }
+
+    function drawBaseGround() {
+      const b = map.baseZone;
+      ctx.fillStyle = "rgba(232, 207, 141, .5)";
+      roundRect(b.x, b.y, b.w, b.h, 28);
+      ctx.fill();
+
+      ctx.strokeStyle = "rgba(88, 93, 64, .18)";
+      ctx.lineWidth = 2;
+      for (let x = b.x + 48; x < b.x + b.w; x += 80) {
+        ctx.beginPath();
+        ctx.moveTo(x, b.y + 20);
+        ctx.lineTo(x, b.y + b.h - 20);
+        ctx.stroke();
+      }
+      for (let y = b.y + 45; y < b.y + b.h; y += 80) {
+        ctx.beginPath();
+        ctx.moveTo(b.x + 20, y);
+        ctx.lineTo(b.x + b.w - 20, y);
+        ctx.stroke();
+      }
+    }
+
+    function drawMud() {
+      for (const mud of map.mud) {
+        ctx.fillStyle = "rgba(111, 83, 47, .42)";
+        roundRect(mud.x, mud.y, mud.w, mud.h, 22);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(83, 60, 34, .35)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.fillStyle = "rgba(72, 54, 34, .32)";
+        for (let i = 0; i < 9; i += 1) {
+          ctx.beginPath();
+          ctx.ellipse(mud.x + 20 + i * 23, mud.y + 25 + (i % 3) * 18, 13, 5, -.18, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+
+    function drawDeployZones() {
+      ctx.save();
+      for (const z of map.deployZones) {
+        ctx.fillStyle = "rgba(68, 142, 112, .22)";
+        ctx.fillRect(z.x, z.y, z.w, z.h);
+        ctx.strokeStyle = "rgba(26, 92, 77, .75)";
+        ctx.lineWidth = 3;
+        ctx.setLineDash([12, 10]);
+        ctx.strokeRect(z.x, z.y, z.w, z.h);
+      }
+      ctx.setLineDash([]);
+      ctx.fillStyle = "rgba(20, 70, 56, .75)";
+      ctx.font = "700 20px system-ui";
+      ctx.fillText("四面部署区", 28, 48);
+      ctx.restore();
+    }
+
+    function drawPaths() {
+      ctx.strokeStyle = "rgba(92, 72, 42, .22)";
+      ctx.lineWidth = 24;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      ctx.moveTo(620, 664);
+      ctx.lineTo(970, 700);
+      ctx.lineTo(1215, 448);
+      ctx.lineTo(1440, 540);
+      ctx.moveTo(970, 700);
+      ctx.lineTo(1090, 834);
+      ctx.lineTo(1435, 790);
+      ctx.stroke();
+    }
+
+    function drawDefenseRanges() {
+      for (const structure of state.structures) {
+        if (!structure.alive || structure.kind !== "defense") continue;
+        const def = structureDefs[structure.type];
+        const c = centerOf(structure);
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, def.range, 0, Math.PI * 2);
+        ctx.fillStyle = structure.type === "machineGun" ? "rgba(240, 181, 64, .045)" : "rgba(217, 79, 69, .055)";
+        ctx.fill();
+        ctx.strokeStyle = "rgba(217, 79, 69, .16)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    }
+
+    function drawObstacles() {
+      for (const o of state.obstacles) {
+        if (o.type === "rock") drawRock(o);
+        else drawTree(o);
+      }
+    }
+
+    function drawRock(o) {
+      ctx.save();
+      ctx.translate(o.x, o.y);
+      ctx.fillStyle = "rgba(20, 28, 34, .18)";
+      ctx.beginPath();
+      ctx.ellipse(4, o.r * .65, o.r * 1.05, o.r * .28, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#79828a";
+      ctx.beginPath();
+      ctx.moveTo(-o.r, 6);
+      ctx.lineTo(-o.r * .5, -o.r * .65);
+      ctx.lineTo(o.r * .32, -o.r * .85);
+      ctx.lineTo(o.r, -o.r * .08);
+      ctx.lineTo(o.r * .7, o.r * .62);
+      ctx.lineTo(-o.r * .55, o.r * .74);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "rgba(255, 255, 255, .18)";
+      ctx.beginPath();
+      ctx.moveTo(-o.r * .4, -o.r * .45);
+      ctx.lineTo(o.r * .28, -o.r * .64);
+      ctx.lineTo(o.r * .12, -o.r * .2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawTree(o) {
+      ctx.save();
+      ctx.translate(o.x, o.y);
+      ctx.fillStyle = "#7b5534";
+      ctx.fillRect(-6, -2, 12, 36);
+      ctx.fillStyle = "#2f6d45";
+      ctx.beginPath();
+      ctx.arc(0, -16, o.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#3f8055";
+      ctx.beginPath();
+      ctx.arc(-13, -26, o.r * .55, 0, Math.PI * 2);
+      ctx.arc(14, -27, o.r * .5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawStructures() {
+      for (const structure of state.structures) {
+        if (!structure.alive) {
+          drawRubble(structure);
+          continue;
+        }
+        if (structure.kind === "wall") drawWall(structure);
+        else if (structure.kind === "defense") drawDefense(structure);
+        else drawNormalBuilding(structure);
+        drawHealthBar(structure.x, structure.y - 12, structure.w, 8, structure.hp / structure.maxHp, structure.kind === "wall" ? "#8a725e" : "#d94f45");
+      }
+    }
+
+    function drawNormalBuilding(building) {
+      ctx.save();
+      ctx.translate(building.x, building.y);
+      ctx.fillStyle = "#b98242";
+      roundRect(0, 18, building.w, building.h - 18, 8);
+      ctx.fill();
+      ctx.fillStyle = "#d29a2e";
+      ctx.beginPath();
+      ctx.moveTo(-8, 24);
+      ctx.lineTo(building.w / 2, -10);
+      ctx.lineTo(building.w + 8, 24);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "#5c6f78";
+      ctx.fillRect(building.w * .37, building.h * .47, building.w * .26, building.h * .35);
+      ctx.fillStyle = "rgba(255, 255, 255, .45)";
+      ctx.fillRect(building.w * .14, building.h * .43, 18, 16);
+      ctx.fillRect(building.w * .72, building.h * .43, 18, 16);
+      drawLabel(building.name, building.w / 2, building.h + 19);
+      ctx.restore();
+    }
+
+    function drawDefense(structure) {
+      ctx.save();
+      ctx.translate(structure.x, structure.y);
+      if (structure.type === "machineGun") {
+        ctx.fillStyle = "#6f7881";
+        roundRect(9, 22, structure.w - 18, structure.h - 16, 8);
+        ctx.fill();
+        ctx.fillStyle = "#343c42";
+        ctx.fillRect(structure.w / 2 - 5, -22, 10, 48);
+        ctx.fillRect(structure.w / 2 + 8, -16, 8, 40);
+        ctx.fillStyle = "#d8a537";
+        roundRect(3, 3, structure.w - 6, 28, 8);
+        ctx.fill();
+      } else if (structure.type === "cannon") {
+        ctx.fillStyle = "#66717a";
+        roundRect(7, 24, structure.w - 14, structure.h - 16, 10);
+        ctx.fill();
+        ctx.fillStyle = "#30363b";
+        ctx.save();
+        ctx.translate(structure.w / 2, 18);
+        ctx.rotate(-.35);
+        roundRect(-9, -38, 18, 58, 8);
+        ctx.fill();
+        ctx.restore();
+        ctx.fillStyle = "#c94c43";
+        roundRect(0, 5, structure.w, 26, 8);
+        ctx.fill();
+      } else {
+        ctx.fillStyle = "#7d8790";
+        roundRect(10, 18, structure.w - 20, structure.h - 12, 9);
+        ctx.fill();
+        ctx.fillStyle = "#d94f45";
+        roundRect(0, 0, structure.w, 28, 8);
+        ctx.fill();
+        ctx.fillStyle = "#313b44";
+        ctx.fillRect(structure.w / 2 - 7, -20, 14, 30);
+      }
+      drawLabel(structure.name, structure.w / 2, structure.h + 20);
+      ctx.restore();
+    }
+
+    function drawWall(wall) {
+      ctx.save();
+      ctx.translate(wall.x, wall.y);
+      ctx.fillStyle = "#866d55";
+      roundRect(2, 5, wall.w - 4, wall.h - 8, 6);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(58, 41, 29, .38)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(8, 16);
+      ctx.lineTo(wall.w - 8, 16);
+      ctx.moveTo(8, 31);
+      ctx.lineTo(wall.w - 8, 31);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawUnits() {
+      for (const unit of state.units) {
+        if (!unit.alive) continue;
+        const def = unitDefs[unit.type];
+        if (unit.type === "tank") drawTank(unit, def);
+        else drawSoldier(unit, def);
+        if (unit.team === "defender") {
+          ctx.strokeStyle = "#d94f45";
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(unit.x, unit.y + 1, def.radius + 5, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        drawHealthBar(unit.x - 20, unit.y - def.radius - 18, 40, 6, unit.hp / unit.maxHp, def.color);
+      }
+    }
+
+    function drawSoldier(unit, def) {
+      ctx.save();
+      ctx.translate(unit.x, unit.y);
+      ctx.fillStyle = "rgba(17, 28, 24, .2)";
+      ctx.beginPath();
+      ctx.ellipse(0, 17, 17, 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#273d33";
+      ctx.lineWidth = 5;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(-6, 8);
+      ctx.lineTo(-12, 20 + Math.sin(unit.swing) * 3);
+      ctx.moveTo(6, 8);
+      ctx.lineTo(13, 20 - Math.sin(unit.swing) * 3);
+      ctx.stroke();
+      ctx.fillStyle = def.color;
+      ctx.beginPath();
+      ctx.arc(0, 2, def.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#f0c38a";
+      ctx.beginPath();
+      ctx.arc(0, -13, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = unit.type === "ranger" ? "#2e3035" : "#2b4538";
+      ctx.fillRect(8, -2, unit.type === "ranger" ? 25 : 18, 5);
+      ctx.restore();
+    }
+
+    function drawTank(unit, def) {
+      ctx.save();
+      ctx.translate(unit.x, unit.y);
+      ctx.fillStyle = "rgba(17, 28, 24, .22)";
+      ctx.beginPath();
+      ctx.ellipse(0, 20, 28, 8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#3d444a";
+      roundRect(-26, -13, 52, 32, 8);
+      ctx.fill();
+      ctx.fillStyle = def.color;
+      roundRect(-18, -21, 36, 26, 8);
+      ctx.fill();
+      ctx.fillStyle = "#282d31";
+      ctx.fillRect(8, -12, 32, 8);
+      ctx.fillStyle = "#22272b";
+      ctx.fillRect(-24, 15, 48, 7);
+      ctx.restore();
+    }
+
+    function drawProjectiles() {
+      for (const projectile of state.projectiles) {
+        ctx.fillStyle = projectile.color;
+        ctx.beginPath();
+        ctx.arc(projectile.x, projectile.y, projectile.splashRadius ? 6 : 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function drawEffects() {
+      for (const effect of state.effects) {
+        const t = effect.life / effect.maxLife;
+        if (effect.type === "slash") {
+          ctx.strokeStyle = `rgba(255, 255, 255, ${t})`;
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.arc(effect.x, effect.y, 30 * (1 - t) + 12, -1, 1.5);
+          ctx.stroke();
+        } else if (effect.type === "collapse") {
+          ctx.fillStyle = `rgba(70, 55, 43, ${.35 * t})`;
+          ctx.beginPath();
+          ctx.arc(effect.x, effect.y, 54 * (1 - t), 0, Math.PI * 2);
+          ctx.fill();
+        } else if (effect.type === "boom") {
+          ctx.fillStyle = `rgba(217, 94, 42, ${.45 * t})`;
+          ctx.beginPath();
+          ctx.arc(effect.x, effect.y, 46 * (1 - t) + 10, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (effect.type === "muzzle") {
+          ctx.strokeStyle = `rgba(255, 236, 155, ${t})`;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(effect.x, effect.y);
+          ctx.lineTo(effect.tx, effect.ty);
+          ctx.stroke();
+        } else {
+          ctx.fillStyle = `rgba(217, 79, 69, ${.45 * t})`;
+          ctx.beginPath();
+          ctx.arc(effect.x, effect.y, 24 * (1 - t) + 8, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+
+    function drawRubble(structure) {
+      ctx.save();
+      ctx.translate(structure.x, structure.y);
+      ctx.fillStyle = "rgba(74, 60, 47, .38)";
+      roundRect(8, structure.h * .56, structure.w - 16, Math.max(14, structure.h * .32), 8);
+      ctx.fill();
+      ctx.fillStyle = "rgba(87, 74, 58, .7)";
+      ctx.fillRect(18, structure.h * .48, 18, 16);
+      ctx.fillRect(structure.w * .52, structure.h * .6, 24, 14);
+      ctx.restore();
+    }
+
+    function drawOutcome() {
+      if (state.phase === "playing" || state.phase === "editing") return;
+      ctx.fillStyle = "rgba(10, 18, 24, .42)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#ffffff";
+      ctx.textAlign = "center";
+      ctx.font = "900 76px system-ui";
+      ctx.fillText(state.phase === "victory" ? "胜利" : "失败", canvas.width / 2, canvas.height / 2 - 20);
+      ctx.font = "700 24px system-ui";
+      ctx.fillText("点击右侧按钮重新开始", canvas.width / 2, canvas.height / 2 + 34);
+      ctx.textAlign = "start";
+    }
+
+    function drawLabel(text, x, y) {
+      ctx.fillStyle = "rgba(22, 33, 43, .82)";
+      ctx.font = "700 15px system-ui";
+      ctx.textAlign = "center";
+      ctx.fillText(text, x, y);
+      ctx.textAlign = "start";
+    }
+
+    function drawHealthBar(x, y, w, h, ratio, color) {
+      ctx.fillStyle = "rgba(20, 28, 35, .22)";
+      roundRect(x, y, w, h, 4);
+      ctx.fill();
+      ctx.fillStyle = color;
+      roundRect(x, y, Math.max(0, w * ratio), h, 4);
+      ctx.fill();
+    }
+
+    function nearestPointOnRect(point, rect) {
+      return {
+        x: clamp(point.x, rect.x, rect.x + rect.w),
+        y: clamp(point.y, rect.y, rect.y + rect.h),
+      };
+    }
+
+    function attackDistanceToTarget(unit, target) {
+      return attackDistanceFromPointToTarget(unit, target);
+    }
+
+    function attackDistanceFromPointToTarget(point, target) {
+      if (!target.kind) return distanceBetween(point, target);
+      const contactPadding = target.kind === "wall" ? 24 : 0;
+      const attackRect = contactPadding > 0 ? inflatedRect(target, contactPadding) : target;
+      return distanceBetween(point, nearestPointOnRect(point, attackRect));
+    }
+
+    function rectCircleOverlap(rect, x, y, r) {
+      const nearest = nearestPointOnRect({ x, y }, rect);
+      return Math.hypot(nearest.x - x, nearest.y - y) <= r;
+    }
+
+    function rectsOverlap(a, b) {
+      return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+    }
+
+    function pointInsideRect(point, rect) {
+      return point.x >= rect.x && point.x <= rect.x + rect.w && point.y >= rect.y && point.y <= rect.y + rect.h;
+    }
+
+    function inflatedRect(rect, amount) {
+      return { x: rect.x - amount, y: rect.y - amount, w: rect.w + amount * 2, h: rect.h + amount * 2 };
+    }
+
+    function distanceBetween(a, b) {
+      return Math.hypot(a.x - b.x, a.y - b.y);
+    }
+
+    function centerOf(rect) {
+      return { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 };
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function roundRect(x, y, w, h, radius) {
+      const r = Math.min(radius, Math.abs(w) / 2, Math.abs(h) / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    function loop(now) {
+      const dt = Math.min(.05, (now - lastTime) / 1000);
+      lastTime = now;
+      update(dt);
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    canvas.addEventListener("pointerdown", handlePointerDown);
+    canvas.addEventListener("pointermove", handlePointerMove);
+    canvas.addEventListener("pointerup", handlePointerUp);
+    canvas.addEventListener("pointercancel", () => { state.pointer.down = false; });
+    ui.restartButton.addEventListener("click", () => resetGame());
+    ui.systemMapButton.addEventListener("click", () => resetGame("system"));
+    ui.customMapButton.addEventListener("click", () => resetGame("custom"));
+    ui.startAttackButton.addEventListener("click", startAttack);
+    ui.clearLayoutButton.addEventListener("click", clearCustomLayout);
+    ui.saveLayoutButton.addEventListener("click", saveCustomLayout);
+    ui.loadLayoutButton.addEventListener("click", loadCustomLayout);
+
+    resetGame();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
