@@ -387,11 +387,15 @@
     const COLS = Math.ceil(WORLD_WIDTH / TILE);
     const ROWS = Math.ceil(WORLD_HEIGHT / TILE);
     const LAYOUT_STORAGE_KEY = "rtsgame0.customLayout.v1";
+    const STRUCTURE_HP = 240;
+    const ENGINEERING_REPAIR_INTERVAL = 3;
+    const ENGINEERING_REPAIR_AMOUNT = STRUCTURE_HP / 2;
 
     const map = {
       width: WORLD_WIDTH,
       height: WORLD_HEIGHT,
       baseZone: { x: 732, y: 408, w: 736, h: 544 },
+      buildZone: { x: 560, y: 260, w: 1080, h: 860 },
       deployZones: [
         { name: "上方", x: 0, y: 0, w: WORLD_WIDTH, h: 128 },
         { name: "下方", x: 0, y: WORLD_HEIGHT - 128, w: WORLD_WIDTH, h: 128 },
@@ -416,6 +420,7 @@
         count: 12,
         radius: 15,
         hp: 120,
+        armor: 3,
         speed: 82,
         damage: 16,
         attackRange: 46,
@@ -432,6 +437,7 @@
         count: 8,
         radius: 13,
         hp: 72,
+        armor: 2,
         speed: 74,
         damage: 13,
         attackRange: 155,
@@ -449,6 +455,7 @@
         count: 3,
         radius: 20,
         hp: 380,
+        armor: 12,
         speed: 48,
         damage: 34,
         attackRange: 92,
@@ -462,14 +469,16 @@
     };
 
     const structureDefs = {
-      store: { name: "仓库", kind: "normal", hp: 190, w: 104, h: 82 },
-      barrack: { name: "兵营", kind: "normal", hp: 230, w: 112, h: 88, spawnDefenders: ["infantry", "infantry", "infantry", "ranger"] },
-      vault: { name: "金库", kind: "normal", hp: 240, w: 116, h: 92 },
-      house: { name: "民房", kind: "normal", hp: 175, w: 102, h: 78 },
+      store: { name: "仓库", kind: "normal", hp: STRUCTURE_HP, w: 104, h: 82 },
+      barrack: { name: "兵营", kind: "normal", hp: STRUCTURE_HP, w: 112, h: 88, spawnDefenders: ["infantry", "infantry", "infantry", "ranger"] },
+      vault: { name: "金库", kind: "normal", hp: STRUCTURE_HP, w: 116, h: 92 },
+      house: { name: "民房", kind: "normal", hp: STRUCTURE_HP, w: 102, h: 78 },
+      commandCenter: { name: "军事中枢", kind: "normal", hp: STRUCTURE_HP, w: 122, h: 98, boostsDefenseRate: true },
+      engineeringCenter: { name: "工程中枢", kind: "normal", hp: STRUCTURE_HP, w: 122, h: 98, repairsBuildings: true },
       tower: {
         name: "箭塔",
         kind: "defense",
-        hp: 175,
+        hp: STRUCTURE_HP,
         w: 76,
         h: 76,
         range: 218,
@@ -481,7 +490,7 @@
       machineGun: {
         name: "机枪塔",
         kind: "defense",
-        hp: 190,
+        hp: STRUCTURE_HP,
         w: 78,
         h: 76,
         range: 250,
@@ -493,7 +502,7 @@
       cannon: {
         name: "炮塔",
         kind: "defense",
-        hp: 260,
+        hp: STRUCTURE_HP,
         w: 86,
         h: 86,
         range: 235,
@@ -503,13 +512,15 @@
         splashRadius: 58,
         sound: "cannon",
       },
-      wall: { name: "木墙", kind: "wall", hp: 95, w: 46, h: 46 },
+      wall: { name: "木墙", kind: "wall", hp: STRUCTURE_HP, w: 46, h: 46 },
     };
 
     const buildPalette = [
       { type: "house", mark: "民", color: "#d29a2e", note: "普通建筑，计入摧毁目标。" },
       { type: "store", mark: "仓", color: "#b98242", note: "普通建筑，血量中等。" },
       { type: "barrack", mark: "营", color: "#aa7a35", note: "被摧毁时会爆出防御者。" },
+      { type: "commandCenter", mark: "军", color: "#8e4d63", note: "存活时防御建筑攻速翻倍。" },
+      { type: "engineeringCenter", mark: "工", color: "#4f7f77", note: "每3秒修复受损最重建筑。" },
       { type: "tower", mark: "塔", color: "#d94f45", note: "基础单体防御。" },
       { type: "machineGun", mark: "机", color: "#d8a537", note: "高射速，克制步兵。" },
       { type: "cannon", mark: "炮", color: "#69747e", note: "范围伤害，克制扎堆。" },
@@ -536,8 +547,9 @@
         projectiles: [],
         effects: [],
         elapsed: 0,
-        camera: { x: 460, y: 300 },
-        pointer: { down: false, dragged: false, startX: 0, startY: 0, lastX: 0, lastY: 0 },
+        repairTimer: 0,
+        camera: { x: 460, y: 300, zoom: 1 },
+        pointer: { down: false, dragged: false, startX: 0, startY: 0, lastX: 0, lastY: 0, worldX: 0, worldY: 0 },
         log: isCustom ? "自定义布防：选择建筑，在基地黄色区域内点击摆放。" : "选择兵种后，在地图四周绿色区域部署。",
         resultSoundPlayed: false,
         structures: isCustom ? loadSavedLayoutStructures() : createSystemStructures(),
@@ -562,6 +574,8 @@
         makeStructure("barrack", 1215, 448),
         makeStructure("vault", 1440, 540),
         makeStructure("house", 1090, 834),
+        makeStructure("commandCenter", 820, 600),
+        makeStructure("engineeringCenter", 1375, 660),
         makeStructure("tower", 970, 700),
         makeStructure("machineGun", 1280, 685),
         makeStructure("cannon", 1435, 790),
@@ -738,15 +752,16 @@
 
     function screenToWorld(point) {
       return {
-        x: point.x + state.camera.x,
-        y: point.y + state.camera.y,
+        x: point.x / state.camera.zoom + state.camera.x,
+        y: point.y / state.camera.zoom + state.camera.y,
       };
     }
 
     function clampCamera() {
       if (!state || !state.camera) return;
-      state.camera.x = clamp(state.camera.x, 0, Math.max(0, map.width - canvas.width));
-      state.camera.y = clamp(state.camera.y, 0, Math.max(0, map.height - canvas.height));
+      state.camera.zoom = clamp(state.camera.zoom || 1, .55, 1.8);
+      state.camera.x = clamp(state.camera.x, 0, Math.max(0, map.width - canvas.width / state.camera.zoom));
+      state.camera.y = clamp(state.camera.y, 0, Math.max(0, map.height - canvas.height / state.camera.zoom));
     }
 
     function isInsideRect(point, rect) {
@@ -796,8 +811,10 @@
         team,
         x,
         y,
+        radius: def.radius,
         hp: def.hp,
         maxHp: def.hp,
+        armor: def.armor || 0,
         cooldown: .1,
         acquireTimer: 0,
         pathTimer: 0,
@@ -840,7 +857,7 @@
     }
 
     function validateStructurePlacement(rect) {
-      const paddedBase = inflatedRect(map.baseZone, -8);
+      const paddedBase = inflatedRect(map.buildZone, -8);
       const corners = [
         { x: rect.x, y: rect.y },
         { x: rect.x + rect.w, y: rect.y },
@@ -848,7 +865,7 @@
         { x: rect.x + rect.w, y: rect.y + rect.h },
       ];
       if (!corners.every((corner) => pointInsideRect(corner, paddedBase))) {
-        return { ok: false, message: "建筑只能摆在基地黄色区域内。" };
+        return { ok: false, message: "建筑只能摆在扩大的黄色布防区域内。" };
       }
       if (state.structures.some((structure) => structure.alive && rectsOverlap(inflatedRect(rect, 4), inflatedRect(structure, 4)))) {
         return { ok: false, message: "这里已经有建筑或墙体了。" };
@@ -868,6 +885,7 @@
       }
       state.phase = "playing";
       state.elapsed = 0;
+      state.repairTimer = 0;
       state.units = [];
       state.projectiles = [];
       state.effects = [];
@@ -939,19 +957,25 @@
       state.pointer.startY = point.y;
       state.pointer.lastX = point.x;
       state.pointer.lastY = point.y;
+      const world = screenToWorld(point);
+      state.pointer.worldX = world.x;
+      state.pointer.worldY = world.y;
       canvas.setPointerCapture?.(event.pointerId);
     }
 
     function handlePointerMove(event) {
-      if (!state.pointer.down) return;
       const point = getScreenPointerPosition(event);
+      const world = screenToWorld(point);
+      state.pointer.worldX = world.x;
+      state.pointer.worldY = world.y;
+      if (!state.pointer.down) return;
       const dx = point.x - state.pointer.lastX;
       const dy = point.y - state.pointer.lastY;
       const total = Math.hypot(point.x - state.pointer.startX, point.y - state.pointer.startY);
       if (total > 5) state.pointer.dragged = true;
       if (state.pointer.dragged) {
-        state.camera.x -= dx;
-        state.camera.y -= dy;
+        state.camera.x -= dx / state.camera.zoom;
+        state.camera.y -= dy / state.camera.zoom;
         clampCamera();
       }
       state.pointer.lastX = point.x;
@@ -967,6 +991,20 @@
       if (!wasDragged) handleCanvasClick(screenToWorld(point));
     }
 
+    function handleWheel(event) {
+      event.preventDefault();
+      const screen = getScreenPointerPosition(event);
+      const before = screenToWorld(screen);
+      const zoomFactor = event.deltaY < 0 ? 1.12 : .89;
+      state.camera.zoom = clamp(state.camera.zoom * zoomFactor, .55, 1.8);
+      state.camera.x = before.x - screen.x / state.camera.zoom;
+      state.camera.y = before.y - screen.y / state.camera.zoom;
+      clampCamera();
+      const after = screenToWorld(screen);
+      state.pointer.worldX = after.x;
+      state.pointer.worldY = after.y;
+    }
+
     function update(dt) {
       if (state.phase !== "playing") {
         updateProjectiles(dt);
@@ -975,6 +1013,7 @@
       }
 
       state.elapsed += dt;
+      updateEngineeringRepair(dt);
       updateUnits(dt);
       updateDefenseStructures(dt);
       updateProjectiles(dt);
@@ -1025,8 +1064,25 @@
             }
           }
         }
-        moveUnitAlongPath(unit, dt);
+        if (unit.path.length > 0) moveUnitAlongPath(unit, dt);
+        else if (!target.kind) moveDirectlyTowardUnit(unit, target, dt);
       }
+    }
+
+    function moveDirectlyTowardUnit(unit, target, dt) {
+      const def = unitDefs[unit.type];
+      const dx = target.x - unit.x;
+      const dy = target.y - unit.y;
+      const distance = Math.hypot(dx, dy);
+      if (distance <= 1) return;
+      const desired = Math.max(2, unit.radius + (target.radius || 0) + def.attackRange * .72);
+      if (distance <= desired) return;
+      const speedMultiplier = terrainCostAtPoint(unit.x, unit.y) > 1 ? .58 : 1;
+      const step = Math.min(def.speed * speedMultiplier * dt, distance - desired);
+      unit.x += dx / distance * step;
+      unit.y += dy / distance * step;
+      unit.x = clamp(unit.x, 12, map.width - 12);
+      unit.y = clamp(unit.y, 12, map.height - 12);
     }
 
     function performUnitAttack(unit, target) {
@@ -1057,6 +1113,7 @@
     }
 
     function updateDefenseStructures(dt) {
+      const cooldownMultiplier = hasAliveStructureEffect("boostsDefenseRate") ? .5 : 1;
       for (const structure of state.structures) {
         if (!structure.alive || structure.kind !== "defense") continue;
         const def = structureDefs[structure.type];
@@ -1076,7 +1133,7 @@
         }
 
         if (!target) continue;
-        structure.cooldown = def.cooldown;
+        structure.cooldown = def.cooldown * cooldownMultiplier;
         state.projectiles.push({
           x: origin.x,
           y: origin.y,
@@ -1091,6 +1148,36 @@
         });
         playSound(def.sound);
       }
+    }
+
+    function updateEngineeringRepair(dt) {
+      if (!hasAliveStructureEffect("repairsBuildings")) {
+        state.repairTimer = 0;
+        return;
+      }
+      state.repairTimer += dt;
+      if (state.repairTimer < ENGINEERING_REPAIR_INTERVAL) return;
+      state.repairTimer -= ENGINEERING_REPAIR_INTERVAL;
+
+      let target = null;
+      let missingMost = 0;
+      for (const structure of state.structures) {
+        if (!structure.alive) continue;
+        const missing = structure.maxHp - structure.hp;
+        if (missing > missingMost) {
+          missingMost = missing;
+          target = structure;
+        }
+      }
+      if (!target || missingMost <= 0) return;
+      target.hp = Math.min(target.maxHp, target.hp + ENGINEERING_REPAIR_AMOUNT);
+      const c = centerOf(target);
+      state.effects.push({ type: "repair", x: c.x, y: c.y, life: .5, maxLife: .5 });
+      log(`${target.name} 获得工程中枢修复。`);
+    }
+
+    function hasAliveStructureEffect(effectName) {
+      return state.structures.some((structure) => structure.alive && structureDefs[structure.type][effectName]);
     }
 
     function updateProjectiles(dt) {
@@ -1186,7 +1273,8 @@
 
     function damageUnit(unit, amount) {
       if (!unit.alive) return;
-      unit.hp -= amount;
+      const finalDamage = Math.max(1, amount - (unit.armor || 0));
+      unit.hp -= finalDamage;
       if (unit.hp <= 0) {
         unit.hp = 0;
         unit.alive = false;
@@ -1237,8 +1325,8 @@
         return findNearestEnemyUnit(unit, "attacker");
       }
 
-      const closeDefender = findNearestEnemyUnit(unit, "defender");
-      if (closeDefender && distanceBetween(unit, closeDefender) < 210) return closeDefender;
+      const defender = findNearestEnemyUnit(unit, "defender");
+      if (defender) return defender;
 
       let best = null;
       let bestScore = Infinity;
@@ -1304,10 +1392,11 @@
       const start = worldToCell(unit.x, unit.y);
       const target = worldToCell(targetUnit.x, targetUnit.y);
       const cells = [];
-      for (let c = target.c - 2; c <= target.c + 2; c += 1) {
-        for (let r = target.r - 2; r <= target.r + 2; r += 1) {
+      const reachCells = Math.max(2, Math.ceil((unitDefs[unit.type].attackRange + unit.radius + targetUnit.radius) / TILE) + 1);
+      for (let c = target.c - reachCells; c <= target.c + reachCells; c += 1) {
+        for (let r = target.r - reachCells; r <= target.r + reachCells; r += 1) {
           const p = cellCenter(c, r);
-          if (isCellInside(c, r) && isWalkableCell(c, r) && distanceBetween(p, targetUnit) <= unitDefs[unit.type].attackRange) {
+          if (isCellInside(c, r) && isWalkableCell(c, r) && attackDistanceFromPointToTarget(p, targetUnit, unit.radius) <= unitDefs[unit.type].attackRange * .94) {
             cells.push({ c, r });
           }
         }
@@ -1334,7 +1423,7 @@
       for (let c = min.c; c <= max.c; c += 1) {
         for (let r = min.r; r <= max.r; r += 1) {
           const p = cellCenter(c, r);
-          if (attackDistanceFromPointToTarget(p, target) <= range * .92) cells.push({ c, r });
+          if (attackDistanceFromPointToTarget(p, target, unit.radius) <= range * .94) cells.push({ c, r });
         }
       }
       if (cells.length > 0) return cells;
@@ -1517,11 +1606,13 @@
     function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.save();
+      ctx.scale(state.camera.zoom, state.camera.zoom);
       ctx.translate(-state.camera.x, -state.camera.y);
       drawMap();
       drawDefenseRanges();
       drawObstacles();
       drawStructures();
+      drawPlacementPreview();
       drawUnits();
       drawProjectiles();
       drawEffects();
@@ -1563,6 +1654,16 @@
     }
 
     function drawBaseGround() {
+      const z = map.buildZone;
+      ctx.fillStyle = "rgba(238, 216, 142, .16)";
+      roundRect(z.x, z.y, z.w, z.h, 34);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(116, 101, 56, .28)";
+      ctx.lineWidth = 3;
+      ctx.setLineDash([18, 12]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
       const b = map.baseZone;
       ctx.fillStyle = "rgba(232, 207, 141, .5)";
       roundRect(b.x, b.y, b.w, b.h, 28);
@@ -1713,9 +1814,59 @@
       }
     }
 
+    function drawPlacementPreview() {
+      if (state.phase !== "editing") return;
+      const def = structureDefs[state.selectedBuild];
+      if (!def) return;
+      const snapped = snapPlacementPoint({ x: state.pointer.worldX || centerOf(map.buildZone).x, y: state.pointer.worldY || centerOf(map.buildZone).y });
+      const rect = {
+        x: snapped.x - def.w / 2,
+        y: snapped.y - def.h / 2,
+        w: def.w,
+        h: def.h,
+      };
+      const validation = validateStructurePlacement(rect);
+
+      ctx.save();
+      ctx.globalAlpha = .72;
+      ctx.fillStyle = validation.ok ? "rgba(46, 125, 111, .34)" : "rgba(217, 79, 69, .34)";
+      roundRect(rect.x, rect.y, rect.w, rect.h, 8);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = validation.ok ? "rgba(46, 125, 111, .95)" : "rgba(217, 79, 69, .95)";
+      ctx.lineWidth = 3;
+      ctx.setLineDash([10, 6]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = validation.ok ? "rgba(26, 80, 67, .9)" : "rgba(130, 38, 34, .9)";
+      ctx.font = "800 16px system-ui";
+      ctx.textAlign = "center";
+      ctx.fillText(def.name, rect.x + rect.w / 2, rect.y - 10);
+      ctx.textAlign = "start";
+      ctx.restore();
+    }
+
     function drawNormalBuilding(building) {
       ctx.save();
       ctx.translate(building.x, building.y);
+      if (building.type === "commandCenter" || building.type === "engineeringCenter") {
+        ctx.fillStyle = building.type === "commandCenter" ? "#8e4d63" : "#4f7f77";
+        roundRect(0, 12, building.w, building.h - 12, 9);
+        ctx.fill();
+        ctx.fillStyle = building.type === "commandCenter" ? "#c16c85" : "#6ab09f";
+        roundRect(18, -4, building.w - 36, 34, 8);
+        ctx.fill();
+        ctx.fillStyle = "#eef4f0";
+        ctx.font = "900 28px system-ui";
+        ctx.textAlign = "center";
+        ctx.fillText(building.type === "commandCenter" ? "军" : "工", building.w / 2, 58);
+        ctx.textAlign = "start";
+        drawLabel(building.name, building.w / 2, building.h + 19);
+        ctx.restore();
+        return;
+      }
+
       ctx.fillStyle = "#b98242";
       roundRect(0, 18, building.w, building.h - 18, 8);
       ctx.fill();
@@ -1887,6 +2038,17 @@
           ctx.beginPath();
           ctx.arc(effect.x, effect.y, 46 * (1 - t) + 10, 0, Math.PI * 2);
           ctx.fill();
+        } else if (effect.type === "repair") {
+          ctx.strokeStyle = `rgba(69, 154, 122, ${t})`;
+          ctx.lineWidth = 5;
+          ctx.beginPath();
+          ctx.arc(effect.x, effect.y, 34 * (1 - t) + 14, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.fillStyle = `rgba(69, 154, 122, ${t})`;
+          ctx.font = "900 22px system-ui";
+          ctx.textAlign = "center";
+          ctx.fillText("+", effect.x, effect.y + 7);
+          ctx.textAlign = "start";
         } else if (effect.type === "muzzle") {
           ctx.strokeStyle = `rgba(255, 236, 155, ${t})`;
           ctx.lineWidth = 3;
@@ -1953,14 +2115,14 @@
     }
 
     function attackDistanceToTarget(unit, target) {
-      return attackDistanceFromPointToTarget(unit, target);
+      return attackDistanceFromPointToTarget(unit, target, unit.radius || unitDefs[unit.type].radius || 0);
     }
 
-    function attackDistanceFromPointToTarget(point, target) {
-      if (!target.kind) return distanceBetween(point, target);
+    function attackDistanceFromPointToTarget(point, target, sourceRadius = 0) {
+      if (!target.kind) return Math.max(0, distanceBetween(point, target) - sourceRadius - (target.radius || 0));
       const contactPadding = target.kind === "wall" ? 24 : 0;
       const attackRect = contactPadding > 0 ? inflatedRect(target, contactPadding) : target;
-      return distanceBetween(point, nearestPointOnRect(point, attackRect));
+      return Math.max(0, distanceBetween(point, nearestPointOnRect(point, attackRect)) - sourceRadius);
     }
 
     function rectCircleOverlap(rect, x, y, r) {
@@ -2015,6 +2177,7 @@
     canvas.addEventListener("pointermove", handlePointerMove);
     canvas.addEventListener("pointerup", handlePointerUp);
     canvas.addEventListener("pointercancel", () => { state.pointer.down = false; });
+    canvas.addEventListener("wheel", handleWheel, { passive: false });
     ui.restartButton.addEventListener("click", () => resetGame());
     ui.systemMapButton.addEventListener("click", () => resetGame("system"));
     ui.customMapButton.addEventListener("click", () => resetGame("custom"));
